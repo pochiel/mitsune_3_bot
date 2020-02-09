@@ -12,7 +12,10 @@
 
 # Note
  - I do not have the copyright of the rule of "the big野球(The big YAKYU)" and the document.
+ - 私は"the big野球(The big YAKYU)"のルールとドキュメントに関する著作権を有していません。
+ 
  - This program is buggy and should not be used as a model for the "the big野球(The big YAKYU)" rule.
+ - このプログラムはバグが多いので、"the big野球(The big YAKYU)"のルール処理の手本にしてはいけません。
 
 # How to install
  To be written
