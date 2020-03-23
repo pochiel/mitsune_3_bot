@@ -31,6 +31,7 @@ class bb(cmbase.cmd_group_base):
                             'walk':         [self.cmd_walk,                                             '敬遠'],
                             'showStartMem':    [self.cmd_showStartMem,                                  '現在登録されているスタメンを見る'],
                             'bunt':         [self.cmd_bunt,                                             'バント'],
+                            'changePitcher':         [self.cmd_changePitcher,                           'ピッチャー交代'],
                             'debug':        [self.cmd_dbg,                                              'おちんちんびろーん'],
                             'debugSetIning':        [self.cmd_dbg_setIning,                             'おちんちんびろーん'],
                          }
@@ -57,14 +58,19 @@ class bb(cmbase.cmd_group_base):
     ######################################
     async def setBattingOrderPrime(self, bat_order, position_num, man_number, message, isDebug):
         target_ath = None
+        match_list = self.db.get_match_planned()
+        if len(match_list) == 0:
+            # 多分ここに来たときはシーズン開始前とか
+            await self.say(message, "えっと、何かおかしいです。シーズン開始前とかなんじゃないですかね？")
+            return
         # コマンド入力チャンネルあってる？
-        for match in self.db.get_match_planned():
+        for match in match_list:
             match_id = match[0]
             if message.channel.id == self.db.get_match_channel(match_id):
                 is_channel_right = True
                 break
         # オーナーあっている？
-        for match in self.db.get_match_planned():
+        for match in match_list:
             my_symbol = match[1]
             if self.get_owner_id(message, isDebug) == self.db.get_owner_id(my_symbol):
                 is_owner_right = True
@@ -357,7 +363,7 @@ class bb(cmbase.cmd_group_base):
     # 選手を登録する
     ######################################
     async def cmd_createAth(self, cmd_list, message, isDebug):
-        if len(cmd_list) != 139:
+        if len(cmd_list) != 140:
             await self.say(message, '引数足りてないですね…' + str(len(cmd_list)))
             return
         ath = athreat()
@@ -380,16 +386,17 @@ class bb(cmbase.cmd_group_base):
         ath.feature=cmd_list[16]
         ath.position=cmd_list[17]
         ath.dominant_hand=cmd_list[18]
+        ath.tiredness=cmd_list[19]
         # テーブルを入れる
         ath.batting_tbl = [
-            [	cmd_list[19],	cmd_list[20],	cmd_list[21],	cmd_list[22],	cmd_list[23],	cmd_list[24],	cmd_list[25],	cmd_list[26],	cmd_list[27],	cmd_list[28],	cmd_list[29],	cmd_list[30],	cmd_list[31],	cmd_list[32],	cmd_list[33],	cmd_list[34],	cmd_list[35],	cmd_list[36],	cmd_list[37],	cmd_list[38],	],
-            [	cmd_list[39],	cmd_list[40],	cmd_list[41],	cmd_list[42],	cmd_list[43],	cmd_list[44],	cmd_list[45],	cmd_list[46],	cmd_list[47],	cmd_list[48],	cmd_list[49],	cmd_list[50],	cmd_list[51],	cmd_list[52],	cmd_list[53],	cmd_list[54],	cmd_list[55],	cmd_list[56],	cmd_list[57],	cmd_list[58],	],
-            [	cmd_list[59],	cmd_list[60],	cmd_list[61],	cmd_list[62],	cmd_list[63],	cmd_list[64],	cmd_list[65],	cmd_list[66],	cmd_list[67],	cmd_list[68],	cmd_list[69],	cmd_list[70],	cmd_list[71],	cmd_list[72],	cmd_list[73],	cmd_list[74],	cmd_list[75],	cmd_list[76],	cmd_list[77],	cmd_list[78],	],
-            [	cmd_list[79],	cmd_list[80],	cmd_list[81],	cmd_list[82],	cmd_list[83],	cmd_list[84],	cmd_list[85],	cmd_list[86],	cmd_list[87],	cmd_list[88],	cmd_list[89],	cmd_list[90],	cmd_list[91],	cmd_list[92],	cmd_list[93],	cmd_list[94],	cmd_list[95],	cmd_list[96],	cmd_list[97],	cmd_list[98],	],
-            [	cmd_list[99],	cmd_list[100],	cmd_list[101],	cmd_list[102],	cmd_list[103],	cmd_list[104],	cmd_list[105],	cmd_list[106],	cmd_list[107],	cmd_list[108],	cmd_list[109],	cmd_list[110],	cmd_list[111],	cmd_list[112],	cmd_list[113],	cmd_list[114],	cmd_list[115],	cmd_list[116],	cmd_list[117],	cmd_list[118],	],
+            [	cmd_list[20],	cmd_list[21],	cmd_list[22],	cmd_list[23],	cmd_list[24],	cmd_list[25],	cmd_list[26],	cmd_list[27],	cmd_list[28],	cmd_list[29],	cmd_list[30],	cmd_list[31],	cmd_list[32],	cmd_list[33],	cmd_list[34],	cmd_list[35],	cmd_list[36],	cmd_list[37],	cmd_list[38],	cmd_list[39],   ],
+            [	cmd_list[40],	cmd_list[41],	cmd_list[42],	cmd_list[43],	cmd_list[44],	cmd_list[45],	cmd_list[46],	cmd_list[47],	cmd_list[48],	cmd_list[49],	cmd_list[50],	cmd_list[51],	cmd_list[52],	cmd_list[53],	cmd_list[54],	cmd_list[55],	cmd_list[56],	cmd_list[57],	cmd_list[58],	cmd_list[59],   ],
+            [	cmd_list[60],	cmd_list[61],	cmd_list[62],	cmd_list[63],	cmd_list[64],	cmd_list[65],	cmd_list[66],	cmd_list[67],	cmd_list[68],	cmd_list[69],	cmd_list[70],	cmd_list[71],	cmd_list[72],	cmd_list[73],	cmd_list[74],	cmd_list[75],	cmd_list[76],	cmd_list[77],	cmd_list[78],	cmd_list[79],	],
+            [	cmd_list[80],	cmd_list[81],	cmd_list[82],	cmd_list[83],	cmd_list[84],	cmd_list[85],	cmd_list[86],	cmd_list[87],	cmd_list[88],	cmd_list[89],	cmd_list[90],	cmd_list[91],	cmd_list[92],	cmd_list[93],	cmd_list[94],	cmd_list[95],	cmd_list[96],	cmd_list[97],	cmd_list[98],	cmd_list[99],   ],
+            [	cmd_list[100],	cmd_list[101],	cmd_list[102],	cmd_list[103],	cmd_list[104],	cmd_list[105],	cmd_list[106],	cmd_list[107],	cmd_list[108],	cmd_list[109],	cmd_list[110],	cmd_list[111],	cmd_list[112],	cmd_list[113],	cmd_list[114],	cmd_list[115],	cmd_list[116],	cmd_list[117],	cmd_list[118],	cmd_list[119],	],
         ]
         ath.pitching_tbl = [
-            cmd_list[119],	cmd_list[120],	cmd_list[121],	cmd_list[122],	cmd_list[123],	cmd_list[124],	cmd_list[125],	cmd_list[126],	cmd_list[127],	cmd_list[128],	cmd_list[129],	cmd_list[130],	cmd_list[131],	cmd_list[132],	cmd_list[133],	cmd_list[134],	cmd_list[135],	cmd_list[136],	cmd_list[137],	cmd_list[138],
+            cmd_list[120],	cmd_list[121],	cmd_list[122],	cmd_list[123],	cmd_list[124],	cmd_list[125],	cmd_list[126],	cmd_list[127],	cmd_list[128],	cmd_list[129],	cmd_list[130],	cmd_list[131],	cmd_list[132],	cmd_list[133],	cmd_list[134],	cmd_list[135],	cmd_list[136],	cmd_list[137],	cmd_list[138],  cmd_list[139]
         ]
         if self.db.set_athreat(ath):
             await self.say(message, '選手氏名：' + ath.name + 'さんを' + ath.t_symbol + 'に登録しました！')
@@ -475,6 +482,54 @@ class bb(cmbase.cmd_group_base):
             if match != None:
                 match.setBunt(my_symbol)
                 await self.say(message, "バントの構えです！" + my_symbol + "の監督からバントの指示が出たようです。")
+            else:
+                await self.say(message, "えっと、何かおかしいです。試合の情報が・・・あれ・・・？")
+
+    ######################################
+    # ピッチャー交代
+    ######################################
+    async def cmd_changePitcher(self, cmd_list, message, isDebug):
+        is_channel_right = False
+        is_owner_right = False
+        my_symbol = ""
+        target_pitch = None
+        if len(cmd_list) != 1:
+            await self.say(message, 'ピッチャーの交代ですか？\n　　/bb changePitcher [選手の背番号]')
+            return
+        # コマンド入力チャンネルあってる？
+        for match in self.db.get_match_planned():
+            match_id = match[0]
+            if message.channel.id == self.db.get_match_channel(match_id):
+                is_channel_right = True
+                break
+        # チームオーナーあってる？
+        for match in self.db.get_match_planned():
+            my_symbol = match[1]
+            if self.get_owner_id(message, isDebug) == self.db.get_owner_id(my_symbol):
+                is_owner_right = True
+                break
+            my_symbol = match[2]
+            if self.get_owner_id(message, isDebug) == self.db.get_owner_id(my_symbol):
+                is_owner_right = True
+                break
+        # そのピッチャーいる？
+        for rec in self.db.get_team_1st_member(my_symbol):
+            if rec[0] == int(cmd_list[0]):
+                target_pitch = rec[1]
+                break
+        # コマンドを使う権限（チャンネルがあっているか AND オーナーがあっているか、そんなピッチャーいるか）が正しい？
+        if is_channel_right==False:
+            await self.say(message, "えっと、何かおかしいです。チャンネルとか、あってます？")
+        elif is_owner_right==False:
+            await self.say(message, "えっと、何かおかしいです。この試合に参加するチームのオーナーさんじゃないですよね・・・？")
+        elif target_pitch == None:
+            await self.say(message, "えっと、何かおかしいです。そんな番号の選手いましたっけ・・・？")
+        else:
+            # 正常系 マッチインスタンスを取得して先発ピッチャー登録する
+            match = self.rule.getMatch(message.channel.id)
+            if match != None:
+                match.changePitcher(my_symbol, target_pitch)
+                await self.say(message, "チーム" + my_symbol + "、のリリーフは" + target_pitch.name + "さんですね")
             else:
                 await self.say(message, "えっと、何かおかしいです。試合の情報が・・・あれ・・・？")
 

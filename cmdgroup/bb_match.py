@@ -37,10 +37,12 @@ class teamData(object):
         self.point = 0
         self.member = []
         self.pitcher = None
+        self.pitcher_inning_cnt = 0                 # 現在のピッチャーの連続投球回数
+        self.pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数 
         self.is_first_offense = True
-        self.is_draw_in = False         # 前進守備
-        self.bunt_instructed = False    # バント
-        self.walk_instructed = False    # 敬遠
+        self.is_draw_in = False                     # 前進守備
+        self.bunt_instructed = False                # バント
+        self.walk_instructed = False                # 敬遠
         self.symbol = ""
         self.name = ""
         self.batting_order_num = 0
@@ -109,6 +111,7 @@ class bb_match(object):
         self.last_line = 0
         self.score_board = []
         self.batting_num = 1
+        self.is_runner_out = True
 
     # デバッグ情報取得
     def getDebugInfo(self):
@@ -236,6 +239,20 @@ class bb_match(object):
         # 現在の得点 - １つ前のイニングまでの得点の合計 を現在のイニングに保存
         self.score_board[inning-1][scrbd_index] = str(total_score - cnt_total)
 
+    # 前回のスコアを取得する
+    def getLastIningScore(self, inning, top_or_bot):
+        self.location()
+        scrbd_index = 0
+        cnt_total = 0
+        if top_or_bot==halfInning.INNING_TOP:
+            scrbd_index = 0     # 表の場合配列インデックスは0
+        else:
+            scrbd_index = 1     # 表の場合配列インデックスは1
+        # １つ前のイニングまでの得点の合計を計算する
+        for i in range(inning-1):
+            cnt_total = cnt_total + int(self.score_board[i][scrbd_index])
+        return cnt_total
+
     # 試合状況のテキストを作って出す
     def get_narration_match_info(self):
         ret = ""
@@ -329,6 +346,12 @@ class bb_match(object):
             self.base_1st = None                                        # ランナーのクリア
             self.base_2nd = None
             self.base_3rd = None
+            self.is_runner_out = False
+            # イニングをまたいだのでピッチャーの連続投球数が増える
+            self.getDefence().pitcher_inning_cnt = self.getDefence().pitcher_inning_cnt + 1
+            # 前回の得点と現在の得点が同じ（＝この回無失点）
+            if self.getLastIningScore(self.inning, self.inning_half) == self.offence_team.point:
+                self.getDefence().pitcher_perfect_inning_cnt = self.getDefence().pitcher_perfect_inning_cnt + 1
             self.setScoreBoard(self.inning, self.inning_half, self.offence_team.point)
             if self.inning_half == halfInning.INNING_TOP:               # 表裏の切り替え
                 self.inning_half = halfInning.INNING_BOTTOM
@@ -343,6 +366,9 @@ class bb_match(object):
         self.is_visit_team_ready = False
         # 試合情報を取得
         ret = ret + self.get_narration_match_info()
+        # ピッチャーの疲労情報を追加
+        if self.is_pitcher_tierd(pitcher):
+            ret = ret + "そろそろピッチャーにも疲労の色が見えてまいりました。\n"
         # Next バッターも表示してあげる
         batter = self.offence_team.batting_order[self.offence_team.batting_order_num][1]
         ret = ret + "ネクストバッターは" + batter.name + "\n"
@@ -376,8 +402,14 @@ class bb_match(object):
             self.base_1st = None                                        # ランナーのクリア
             self.base_2nd = None
             self.base_3rd = None
+            self.is_runner_out = False
             self.setScoreBoard(self.inning, self.inning_half, self.offence_team.point)
             ret = ret + "3アウト！チェンジ！\n"
+            # イニングをまたいだのでピッチャーの連続投球数が増える
+            self.getDefence().pitcher_inning_cnt = self.getDefence().pitcher_inning_cnt + 1
+            # 前回の得点と現在の得点が同じ（＝この回無失点）
+            if self.getLastIningScore(self.inning, self.inning_half) == self.offence_team.point:
+                self.getDefence().pitcher_perfect_inning_cnt = self.getDefence().pitcher_perfect_inning_cnt + 1
             if self.is_game_set():
                 # ゲームセット！
                 self.GameSet()
@@ -414,10 +446,10 @@ class bb_match(object):
         # 現在の内部情報に応じて試合進行用の変数を更新
         if self.inning_half == halfInning.INNING_TOP:               # 表
             self.offence_team = self.visit_team
-            pitcher = self.home_starting_pitcher
+            pitcher = self.home_team.pitcher
         else:                                                       # 裏
             self.offence_team = self.home_team
-            pitcher = self.visit_starting_pitcher
+            pitcher = self.visit_team.pitcher
         if self.offence_team.bunt_instructed:
             # バントの処理
             ret = self.next_step_bunt(pitcher)
@@ -425,6 +457,31 @@ class bb_match(object):
             # 通常打撃の処理
             ret = self.next_step_batting(pitcher)
         return ret
+
+    # ピッチャーの疲労判定
+    def is_pitcher_tierd(self, pitcher):
+        self.location()
+        is_tierd = False
+        # 疲労ポイントと連続投球回が等しいかそれ以下だった場合疲労ではない
+        if self.getDefence().pitcher_inning_cnt >= int(pitcher.tiredness):
+            is_tierd = False
+        # 疲労ポイントの回数を投げた次の回だけは、敬遠以外のランナーを出すまでは疲労しません。
+        elif self.getDefence().pitcher_inning_cnt == (int(pitcher.tiredness) + 1):
+            # 敬遠以外のランナーを出してたら疲労する
+            if self.is_runner_out == True:
+                is_tierd = True
+        else:
+            is_tierd = True
+        # ５イニング以上０点に抑えている投手は点を取られるまでは、疲労しません
+        if is_tierd == True:
+            if self.getDefence().pitcher_perfect_inning_cnt >= 5:
+                is_tierd = False
+            if self.inning >= 10:
+                is_tierd = True
+        # １１回からは最初から疲労状態となります。
+        if self.inning >= 11:
+            is_tierd = True
+        return is_tierd
 
     # バトルのコア処理
     def battle_core(self, pitcher, batter):
@@ -435,7 +492,15 @@ class bb_match(object):
         # ピッチャーの投球を確定
         self.checkListIndex(pitcher.pitching_tbl, pitDice, chkprint(pitcher.pitching_tbl))
 
-        pitch_num = int(pitcher.pitching_tbl[pitDice]) - 1
+        pitch_num_str = pitcher.pitching_tbl[pitDice]
+
+        # 疲労影響をチェック
+        if pitch_num_str.find('*') != -1:
+            pitch_num_str = pitch_num_str.replace('*', '')
+            if self.is_pitcher_tierd(pitcher):
+                if pitch_num_str != '1':
+                    pitch_num_str = str(int(pitch_num_str) - 1)
+        pitch_num = int(pitch_num_str) - 1
         # 打撃結果を取得
         self.checkListIndex(batter.batting_tbl, pitch_num, chkprint(batter.batting_tbl))
         self.checkListIndex(batter.batting_tbl[pitch_num], batDice, chkprint(batter.batting_tbl[pitch_num]))
@@ -537,6 +602,7 @@ class bb_match(object):
             self.offence_team.point = self.offence_team.point + 1
             ret = ret + "ホームイン！一点追加！\n"
             ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+            self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         # 確定したので更新してやる
         self.base_1st = local_base_1st
         self.base_2nd = local_base_2nd
@@ -866,6 +932,7 @@ class bb_match(object):
     # ホームラン
     def procHR(self, cmd, batter):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         ret = ""
         add_point = 1
         # 1塁→Home
@@ -881,14 +948,16 @@ class bb_match(object):
         self.offence_team.point = self.offence_team.point + add_point
         ret = ret + "ホームラン！" + str(add_point) + "点追加！\n"
         ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+        self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         self.base_1st = None
         self.base_2nd = None
         self.base_3rd = None
         return ret
-
+    
     # スリーベースヒット
     def proc3H(self, cmd, batter):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         ret = cmd + "！スリーベースヒット！\n"
         add_point = 0
         # １塁ランナーがいたら３塁に進塁
@@ -909,6 +978,7 @@ class bb_match(object):
             self.offence_team.point = self.offence_team.point + add_point
             ret = ret + "ホームイン！" + str(add_point) + "点追加！\n"
             ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+            self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         # 確定したので更新してやる
         self.base_1st = local_base_1st
         self.base_2nd = local_base_2nd
@@ -918,6 +988,7 @@ class bb_match(object):
     # ツーベースヒット
     def proc2H(self, cmd, batter):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         ret = cmd + "！ツーベースヒット！\n"
         add_point = 0
         # １塁ランナーがいたら３塁に進塁
@@ -938,6 +1009,7 @@ class bb_match(object):
             self.offence_team.point = self.offence_team.point + add_point
             ret = ret + "ホームイン！" + str(add_point) + "点追加！\n"
             ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+            self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         # 確定したので更新してやる
         self.base_1st = local_base_1st
         self.base_2nd = local_base_2nd
@@ -947,16 +1019,19 @@ class bb_match(object):
     # 単打（内野安打との処理の違いが分からない・・・）
     def procH(self, cmd, batter):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         return self.procSingleHit(cmd, batter)
 
     # 内野安打
     def procIH(self, cmd, batter):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         return self.procSingleHit(cmd, batter)
 
     # ランナーの在塁状況を数値化する
     def getRunnerBitField(self):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         runner_info = 0
         if self.base_1st != None:
             runner_info = runner_info | 0x01  # 1bit目を立てる
@@ -1066,6 +1141,7 @@ class bb_match(object):
                     self.offence_team.point = self.offence_team.point + 1
                     ret = ret + "三塁ランナーはホームイン！" + str(1) + "点追加！\n"
                     ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+                    self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         # 確定したので更新してやる
         self.base_1st = local_base_1st
         self.base_2nd = local_base_2nd
@@ -1128,6 +1204,7 @@ class bb_match(object):
                 self.offence_team.point = self.offence_team.point + 1
                 ret = ret + "三塁ランナーがホームイン！一点追加！\n"
                 ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+                self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
                 local_base_1st = runner
                 local_base_3rd = self.base_2nd
         elif(runner_info == runners.RUNNER_2_3):
@@ -1201,6 +1278,7 @@ class bb_match(object):
                 self.offence_team.point = self.offence_team.point + 1
                 ret = ret + "三塁ランナーがホームイン！一点追加！\n"
                 ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+                self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         elif(runner_info == runners.RUNNER_1_3):
             ret = ret + "三塁ランナー走っている！"
             if self.getDefence().is_draw_in:
@@ -1216,6 +1294,7 @@ class bb_match(object):
                 self.offence_team.point = self.offence_team.point + 1
                 ret = ret + "三塁ランナーがホームイン！一点追加！\n"
                 ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+                self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
                 local_base_2nd = self.base_1st
         elif(runner_info == runners.RUNNER_2_3):
             ret = ret + "三塁ランナー走っている！"
@@ -1232,6 +1311,7 @@ class bb_match(object):
                 self.offence_team.point = self.offence_team.point + 1
                 ret = ret + "三塁ランナーがホームイン！一点追加！\n"
                 ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+                self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
                 local_base_3rd = self.base_2nd
         else:   # お満塁
             ret = ret + "三塁ランナー走っている！"
@@ -1249,6 +1329,7 @@ class bb_match(object):
                 self.offence_team.point = self.offence_team.point + 1
                 ret = ret + "三塁ランナーがホームイン！一点追加！\n"
                 ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+                self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
                 local_base_2nd = self.base_1st
                 local_base_3rd = self.base_2nd
         # 確定したので更新してやる
@@ -1298,6 +1379,7 @@ class bb_match(object):
             self.offence_team.point = self.offence_team.point + 1
             ret = ret + "ホームイン！一点追加！\n"
             ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+            self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         # 確定したので更新してやる
         self.base_1st = local_base_1st
         self.base_2nd = local_base_2nd
@@ -1437,6 +1519,7 @@ class bb_match(object):
                     self.offence_team.point = self.offence_team.point + 1
                     ret = ret + "三塁ランナー走った！ホームイン！一点追加！\n"
                     ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+                    self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
                     local_base_3rd = None
                 # 三塁ランナーはセーフになるが、他のランナーはアウトになるので、ここはelifではなく ifで正しい
                 if self.base_2nd != None:
@@ -1565,12 +1648,14 @@ class bb_match(object):
     # フォアボール
     def procBB(self, cmd, batter):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         self.procPushRunner(batter)
         return "フォアボール"
 
     # デッドボール
     def procDB(self, cmd, batter):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         self.procPushRunner(batter)
         return "デッドボール"
 
@@ -1582,6 +1667,7 @@ class bb_match(object):
     # 単打処理
     def procSingleHit(self, cmd, runner):
         self.location()
+        self.is_runner_out = True   # ランナーを出してしまった
         ret = cmd + "！内野安打！\n"
         # １塁ランナーがいたら２塁に進塁
         local_base_1st = runner
@@ -1599,6 +1685,7 @@ class bb_match(object):
             self.offence_team.point = self.offence_team.point + 1
             ret = ret + "ホームイン！一点追加！\n"
             ret = ret + self.home_team_symbol + " " + str(self.home_team.point) + " - " + str(self.visit_team.point) + " " +  self.visit_team_symbol + "\n"
+            self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
         # 確定したので更新してやる
         self.base_1st = local_base_1st
         self.base_2nd = local_base_2nd
@@ -1623,6 +1710,7 @@ class bb_match(object):
                     # 3塁ランナーもすでにおるので
                     # 押しだし得点確定(3rd→Home)
                     self.offence_team.point = self.offence_team.point + 1
+                    self.getDefence().pitcher_perfect_inning_cnt = 0         # 現在のピッチャーの連続無失点回数をリセット
                 else:
                     # 3塁ランナーおらんので押し出し得点はなし
                     # do nothing.
@@ -1659,6 +1747,25 @@ class bb_match(object):
         # 指定したチームシンボルが一致したらバントの指示を出す。
         if my_symbol == self.offence_team.symbol:
             self.offence_team.bunt_instructed = True
+
+    # ピッチャー交代
+    def changePitcher(self, symbol, pitcher):
+        self.location()
+        target_team = None
+        if self.home_team_symbol==symbol:
+            target_team = self.home_team
+        if self.visit_team_symbol==symbol:
+            target_team = self.visit_team
+        # 打順の交代
+        for batter in tatarget_team.batting_order:
+            if batter[0] == Position.PITCHER:
+                batter[1] = pitcher
+        # ピッチャー交代
+        target_team.pitcher = pitcher
+        # 連続投球回数などのリセット
+        target_team.pitcher_inning_cnt = 0
+        target_team.pitcher_perfect_inning_cnt = 0
+
 
     # 守備位置を文字列に変換する
     def getPositionString(self, pos):

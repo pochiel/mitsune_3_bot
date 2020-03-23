@@ -40,5 +40,6 @@ class athreat(object):
         self.position = Position.NO_POSITION
         self.batting_tbl = {}
         self.pitching_tbl = {}
+        self.tiredness = 0
 
 
