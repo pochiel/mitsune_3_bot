@@ -623,6 +623,10 @@ class bb(cmbase.cmd_group_base):
         match = self.rule.getMatch(message.channel.id)
         if match != None:
             match.inning = int(cmd_list[0])
+            # デバッグ用　ご自由に
+            for i in range(1, int(cmd_list[0])):
+                #match.home_team.point = match.home_team.point + i
+                match.score_board.append(["0", "0"])
             await self.say(message, "試合は" + cmd_list[0] + "回に飛びます。")
         else:
             await self.say(message, "えっと、何かおかしいです。試合の情報が・・・あれ・・・？")

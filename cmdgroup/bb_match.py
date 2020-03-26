@@ -398,6 +398,10 @@ class bb_match(object):
             self.offence_team.batting_order_num = self.offence_team.batting_order_num + 1
         # 3 OUT チェンジ判定
         if self.out_count >= 3:
+            if self.is_game_set():
+                # ゲームセット！
+                self.GameSet()
+                return ret + "ゲームセット！\n"
             self.out_count = 0                                          # アウトカウントのクリア
             self.base_1st = None                                        # ランナーのクリア
             self.base_2nd = None
@@ -410,10 +414,6 @@ class bb_match(object):
             # 前回の得点と現在の得点が同じ（＝この回無失点）
             if self.getLastIningScore(self.inning, self.inning_half) == self.offence_team.point:
                 self.getDefence().pitcher_perfect_inning_cnt = self.getDefence().pitcher_perfect_inning_cnt + 1
-            if self.is_game_set():
-                # ゲームセット！
-                self.GameSet()
-                return ret + "ゲームセット！\n"
             if self.inning_half == halfInning.INNING_TOP:               # 表裏の切り替え
                 self.inning_half = halfInning.INNING_BOTTOM
                 self.offence_team = self.home_team
